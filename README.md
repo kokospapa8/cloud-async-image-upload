@@ -237,3 +237,12 @@ I have tested with image size (100Kb, 500Kb, 1Mb, 5Mb and 10Mb) with lambda memo
 As you can see from the graph, bigger memory is not necessarily cheaper. It can be faster but since this is async operation, I recommend to go with less cost over time consumption.
 
 Only use this as reference and you should test with your own data and find out optimal memory for your lambda function.
+
+## unittest
+unittests are under sam/unittests/unit/*.py
+
+```bash
+$ cd sam
+$ pip install -r tests/requirements.txt
+$ python -m pytest tests/
+```

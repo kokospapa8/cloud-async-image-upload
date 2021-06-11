@@ -8,19 +8,13 @@ import boto3
 from PIL import Image, ImageFilter
 
 
-'''
-This is basic function for generating thumbnails
- 
-
-'''
-
 # ENVIRONMENT VARIABLES
 IMAGE_FOLDER = os.environ.get('IMAGE_FOLDER', "image/")
 CALLBACK_URL = os.environ.get('CALLBACK_URL', "http://localhost:8000/async_image_upload/presignedurl/{key}/")
 THUMB_DIMENSION_SMALL = int(os.environ.get('THUMB_DIMENSION_SMALL', 50))
 THUMB_DIMENSION_MEDIUM = int(os.environ.get('THUMB_DIMENSION_MEDIUM', 100))
 THUMB_DIMENSION_LARGE = int(os.environ.get('THUMB_DIMENSION_LARGE', 400))
-BLUR = os.environ.get('BLUR', False)
+BLUR = os.getenv('BLUR', 'False').lower() in ('true', '1', 't')
 BLUR_RADIUS = int(os.environ.get('BLUR_RADIUS', 20))
 
 
@@ -39,21 +33,20 @@ THUMB_SIZES = [size_original,
 
 # Entry Point
 def lambda_handler(event, context):
-    print(event)
+    # print(event)
     # retrive bucket and key from event
     bucket = event['Records'][0]['s3']['bucket']['name']
     key = urllib.parse.unquote_plus(event['Records'][0]['s3']['object']['key'], encoding='utf-8')
-
 
     try:
         generate_thumbs(bucket, key)
     except Exception as e:
         print(e)
         resp = invoke_callback(key, e)
-        return {"error": str(e), "resp": resp.json()}
+        return {"error": str(e), "resp": resp.json(), "status_code": resp.status_code}
 
     resp = invoke_callback(key)
-    return {"resp": resp.json()}
+    return {"resp": resp.json(), "status_code": resp.status_code}
 
 
 def set_new_key(size, blur, key, format):
@@ -73,12 +66,11 @@ def set_new_key(size, blur, key, format):
         if blur:
             new_key = f'{IMAGE_FOLDER}{filename}{size_suffix}{blur_suffix}{ext}'
         else:
-            new_key = f'{IMAGE_FOLDER}{filename}{size_suffix}.{ext}'
+            new_key = f'{IMAGE_FOLDER}{filename}{size_suffix}{ext}'
     else:
         if blur:
-            new_key = f'{IMAGE_FOLDER}{filename}{blur_suffix}.{ext}'
+            new_key = f'{IMAGE_FOLDER}{filename}{blur_suffix}{ext}'
     return new_key
-
 
 
 def generate_thumbs(bucket, key):
@@ -94,11 +86,11 @@ def generate_thumbs(bucket, key):
         raise e
 
     metadata = response['Metadata']
-
-
     blur_radius = BLUR_RADIUS
-    size_comb = list(itertools.product(THUMB_SIZES, [True, False])) if BLUR else THUMB_SIZES
+    BLUR = os.getenv('BLUR', 'False').lower() in ('true', '1', 't')
 
+    size_comb = list(itertools.product(THUMB_SIZES, list(set([False, BLUR]))))
+    # print(size_comb)
     # resize & blur
     file_byte_string = response['Body'].read()
     for size, blur in size_comb:
@@ -119,10 +111,10 @@ def generate_thumbs(bucket, key):
                 pil_image.save(in_mem_file, format=pil_image.format)
 
         content_type = f"{pil_image.get_format_mimetype()}"
-        format = pil_image.format
+        fmt = pil_image.format
         in_mem_file.seek(0)
 
-        new_key = set_new_key(size, blur, key, format)
+        new_key = set_new_key(size, blur, key, fmt)
         if new_key is not None:
             s3.put_object(Body=in_mem_file,
                           Bucket=bucket,
